@@ -1,0 +1,65 @@
+import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+/**
+ * Notes:
+ * - Set FRAMER_SITE_URL in Vercel env vars to your Framer site root (e.g. https://your-site.framer.app)
+ * - If your Stripe prices are recurring (subscriptions) set STRIPE_MODE=subscription in Vercel env vars.
+ *   Otherwise leave STRIPE_MODE unset or 'payment' for one-time prices.
+ */
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const {
+      planPriceId,
+      includedQty = 0,
+      extraQty = 0,
+      includedPriceId,
+      extraPriceId,
+    } = req.body;
+
+    if (!planPriceId) {
+      return res.status(400).json({ error: "Missing planPriceId" });
+    }
+
+    // Build line items exactly as frontend expects
+    const line_items = [];
+
+    // add plan (always quantity 1)
+    line_items.push({ price: planPriceId, quantity: 1 });
+
+    // included channels (usually $0 price)
+    if (includedQty > 0 && includedPriceId) {
+      line_items.push({ price: includedPriceId, quantity: includedQty });
+    }
+
+    // extra channels (e.g. $10 each)
+    if (extraQty > 0 && extraPriceId) {
+      line_items.push({ price: extraPriceId, quantity: extraQty });
+    }
+
+    // choose mode depending on your Stripe price types
+    const mode = process.env.STRIPE_MODE === "subscription" ? "subscription" : "payment";
+
+    const origin = process.env.FRAMER_SITE_URL || req.headers.origin || "https://renewed-hands-398434.framer.app";
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items,
+      mode,
+      success_url: `${origin}/success`,
+      cancel_url: `${origin}/cancel`,
+    });
+
+    return res.status(200).json({ url: session.url });
+  } catch (err) {
+    console.error("Stripe Checkout Error:", err);
+    return res.status(500).json({ error: err.message || "Server error" });
+  }
+}

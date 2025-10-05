@@ -1,0 +1,9 @@
+{
+  name stripe-checkout-api,
+  version 1.0.0,
+  main apicreate-checkout-session.js,
+  license MIT,
+  dependencies {
+    stripe ^16.0.0
+  }
+}
